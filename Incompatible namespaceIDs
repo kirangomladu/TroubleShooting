@@ -1,0 +1,39 @@
+java.io.IOException: Incompatible namespaceIDs
+
+If you observe above error in the logs of a DataNode (logs/hadoop-hduser-datanode-.log)
+
+Solution 1: Start from scratch
+
+This step fixes the problem at the cost of erasing all existing data in the cluster’s HDFS file system.
+1.  Stop the full cluster, i.e. both MapReduce and HDFS layers. 
+2.  Delete the data directory on the problematic DataNode: the directory is specified by dfs.data.dir 
+    in conf/hdfs-site.xml; if you followed this tutorial, the relevant directory is /app/hadoop/tmp/dfs/data. 
+3.  Reformat the NameNode. WARNING: all HDFS data is lost during this process! 
+4.  Restart the cluster.
+
+
+When deleting all the HDFS data and starting from scratch does not sound like a good idea (it might be ok during the initial setup/testing), 
+you might give the second approach a try.
+
+Solution 2: Manually update the namespaceID of problematic DataNodes
+
+If only one Data node edit solve problem then:
+
+1.  Stop the problematic DataNode(s). 
+2.  Edit the value of namespaceID in ${dfs.data.dir}/current/VERSION to match the corresponding value of the 
+    current NameNode in ${dfs.name.dir}/current/VERSION. 
+3.  Restart the fixed DataNode(s). 
+
+If you followed the instructions, the full paths of the relevant files are:
+
+NameNode: /app/hadoop/tmp/dfs/name/current/VERSION 
+DataNode: /app/hadoop/tmp/dfs/data/current/VERSION (background: dfs.data.dir is 
+          by default set to ${hadoop.tmp.dir}/dfs/data, and we set hadoop.tmp.dir in this tutorial to /app/hadoop/tmp). 
+
+If you wonder how the contents of VERSION look like, here’s one of mine:
+
+namespaceID=1234567
+storageID=DS-1234567-0.0.0.-9328473211
+cTime=42423424
+storageType=DATA_NODE
+layoutVersion=-13
