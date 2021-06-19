@@ -1,0 +1,342 @@
+Error :- DataXceiver error processing unknown operation + java.io.EOFException
+
+Questioin :- “You seen to many open file Discriptor for Yarn User”   /etc/security/limits.conf 
+edit :- soft nofile 100000 hard nofile 10000 (1lakh) or xceivers
+
+Answer :-  ulimit to be -  open files                      (-n) 32768
+- dfs.datanode.max.transfer.threads to be 16384
+a) Increase the file descriptor limits, by setting ulimit to 8192;
+b) Increase the upper bound on the number of files that each datanode will serve at any one time, by setting xceivers.
+---------------------------------------------------------------------------------------------------------------------
+
+
+
+Error :- Datanode Registration DataXceiver java.io.EOFException
+
+Answer :-  ulimit to be -  open files
+
+Error :- java.io.EOFException in HDFS 0.22.0
+  java.io.DataInputStream.readShort(DataInputStream.java:298)
+        at org.apache.hadoop.hdfs.DFSClient$DFSOutputStream
+Answer :- From Oracle Reads some number of bytes from the contained input stream and stores them into the buffer array b. The number of bytes actually read is returned as an integer. This method blocks until input data is available, end of file is detected, or an exception is thrown.  
+The first byte read is stored into element b[0], the next one into b[1], and so on. The number of bytes read is, at most, equal to the length of b. Let k be the number of bytes actually read; these bytes will be stored in elements b[0] through b[k-1], leaving elements b[k] through b[b.length-1] unaffected. 
+The read(b) method has the same effect as: 
+ read(b, 0, b.length)
+--------------------------------------------------------------------------- 
+
+
+java.io.IOException: Incompatible namespaceIDs   ( Very Imp)
+If you observe above error in the logs of a DataNode (logs/hadoop-hduser-datanode-.log), 
+
+Solution 1: Start from scratch
+This step fixes the problem at the cost of erasing all existing data in the cluster’s HDFS file system.
+1. Stop the full cluster, i.e. both MapReduce and HDFS layers. 
+2. Delete the data directory on the problematic DataNode: the directory is specified by dfs.data.dir in conf/hdfs-site.xml; if you followed this tutorial, the relevant directory is /app/hadoop/tmp/dfs/data. 
+3. Reformat the NameNode. WARNING: all HDFS data is lost during this process! 
+4. Restart the cluster. 
+
+When deleting all the HDFS data and starting from scratch does not sound like a good idea (it might be ok during the initial setup/testing), you might give the second approach a try.
+
+Solution 2: Manually update the namespaceID of problematic DataNodes
+Big thanks to Jared Stehler for the following suggestion. This workaround is “minimally invasive” as you only have to edit a single file on the problematic DataNodes:
+1. Stop the problematic DataNode(s). 
+2. Edit the value of namespaceID in ${dfs.data.dir}/current/VERSION to match the corresponding value of the current NameNode in ${dfs.name.dir}/current/VERSION. 
+3. Restart the fixed DataNode(s). 
+
+If you followed the instructions in my tutorials, the full paths of the relevant files are:
+NameNode: /app/hadoop/tmp/dfs/name/current/VERSION 
+DataNode: /app/hadoop/tmp/dfs/data/current/VERSION (background: dfs.data.dir is by default set to ${hadoop.tmp.dir}/dfs/data, and we set hadoop.tmp.dir in this tutorial to /app/hadoop/tmp). 
+
+If you wonder how the contents of VERSION look like, here’s one of mine:
+namespaceID=393514426
+storageID=DS-1706792599-10.10.10.1-50010-1204306713481
+cTime=1215607609074
+storageType=DATA_NODE
+layoutVersion=-13
+Too many fetch-failures Error
+If you're unable to upgrade the cluster for whatever reason, you can try the following:
+1. Ensure that your hostname is bound to the network IP and NOT 127.0.0.1 in /etc/hosts 2. Ensure that you're using only hostnames and not IPs to reference services.
+If the above are correct, try the following settings:
+set mapred.reduce.slowstart.completed.maps=0.80
+set tasktracker.http.threads=80
+set mapred.reduce.parallel.copies=(>= 10)(10 should probably be sufficient)
+use hostnames instead of ips
+sync it across all the nodes
+try commenting out “127.0.0.1 localhost”
+Restart the cluster after making these changes. 
+replicated to 0 nodes, instead of 1 ERROR
+Common reasons of that:
+1. Only a NameNode instance is running and it's not in safe-mode 
+2. There is no DataNode instances up and running, or some are dead. (Check the servers) 
+3. Namenode and Datanode instances are both running, but they cannot communicate with each other, which means There is connectivity issue between DataNode and NameNode instances. 
+4. Running DataNode instances are not able to talk to the server because of some networking of hadoop-based issues (check logs that include datanode info) 
+5. There is no hard disk space specified in configured data directories for DataNode instances or DataNode instances have run out of space. (check dfs.data.dir // delete old files if any) 
+6. Specified reserved spaces for DataNode instances in dfs.datanode.du.reserved is more than the free space which makes DataNode instances to understand there is no enough free space. 
+7. There is no enough threads for DataNode instances (check datanode logs and dfs.datanode.handler.count value) 
+8. Make sure dfs.data.transfer.protection is not equal to “authentication” and dfs.encrypt.data.transfer is equal to true. 
+Also please: 
+Verify the status of NameNode and DataNode services and check the related logs 
+Verify if core-site.xml has correct fs.defaultFS value and hdfs-site.xml has a valid value. 
+Verify hdfs-site.xml has dfs.namenode.http-address.. for all NameNode instances specified in case of PHD HA configuration. 
+Verify if the permissions on the directories are correct 
+AWS Answer:-
+       When a file is written to HDFS, it is replicated to multiple core nodes. When you see this error, it means that the NameNode daemon does not have any available DataNode instances to write data to in HDFS. In other words, block replication is not taking place. This error can be caused by a number of issues: 
+The HDFS filesystem may have run out of space. This is the most likely cause. 
+DataNode instances may not have been available when the job was run. 
+DataNode instances may have been blocked from communication with the master node. 
+Instances in the core instance group might not be available. 
+Permissions may be missing. For example, the JobTracker daemon may not have permissions to create job tracker information. 
+The reserved space setting for a DataNode instance may be insufficient. Check whether this is the case by checking the dfs.datanode.du.reserved configuration setting. 
+To check whether this issue is caused by HDFS running out of disk space, look at the HDFSUtilization metric in CloudWatch. If this value is too high, you can add additional core nodes to the cluster. If you have a cluster that you think might run out of HDFS disk space, you can set an alarm in CloudWatch to alert you when the value of HDFSUtilization rises above a certain level. For more information, see Manually Resizing a Running Cluster and Monitor Metrics with CloudWatch. 
+If HDFS running out of space was not the issue, check the DataNode logs, the NameNode logs and network connectivity for other issues that could have prevented HDFS from replicating data. For more information, see View Log Files. 
+java.lang.Throwable: Child Error
+        at org.apache.hadoop.mapred.TaskRunner.run(TaskRunner.java:271)
+Caused by: java.io.IOException: 
+           Task process exit with nonzero status of 137.
+        at org.apache.hadoop.mapred.TaskRunner.run(TaskRunner.java:258)
+ AWS Forum Answer :- third-party piece of software, and I can see that it does this:                                    conf.set("mapred.child.java.opts", "-Xmx3G") ;
+the memory allocated for the tasks trackers (sum of mapred.*.child.java.opt in mapred-site.xml) is more than the nodes actual memory 
+Stack ovefflow :- because the JVM stack size was too small, change your MR JVM stack size mapred.child.java.opts -> -Xms2048M -Xmx4096M
+mapred.*.child.java.opt in mapred-site.xml) is more than the nodes actual memorySolution : <property><name>mapred.child.java.opts</name><value>-Xmx512m</value></property> 
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+Error: java.lang.OutOfMemoryError: Java heap space
+at org.apache.hadoop.mapred.ReduceTask$ReduceCopier$MapOutputCopier.shuffleInMemory(ReduceTask.java:1644)
+at org.apache.hadoop.mapred.ReduceTask$ReduceCopier$MapOutputCopier.getMapOutput(ReduceTask.java:1504)
+at org.apache.hadoop.mapred.ReduceTask$ReduceCopier$MapOutputCopier.copyOutput(ReduceTask.java:1339)
+at org.apache.hadoop.mapred.ReduceTask$ReduceCopier$MapOutputCopier.run(ReduceTask.java:1271)
+Sol:- The task had 1 GB of java heap and the mapred.job.shuffle.input.buffer.percent parameter in mapred-site.xml was set to the default of 0.7. This mean that 1 GB * 0.7 = 717 MB of java heap will hold the map outputs that are no bigger than 717 / 4 = 179 MB.
+Reduce mapred.job.shuffle.input.buffer.percent in core-site.xml to a value < 0.7, try 0.5 for example.
+----------------------------------------------------------------------------------------------------------------
+
+
+
+How to optimize shuffling/sorting phase in a hadoop job
+Sorting is too slow
+Increase io.sort.mb and io.sort.factor to increase the buffer used for sorting in-memory and the number of files to merge at once. Possible values: 200 respectively 50
+Can do Partitioning table storage spark solution
+java.io.IOException: Split metadata size exceeded 10000000   Aborting job job_201204170831_0012   at org.apache.hadoop.mapreduce.split.SplitMetaInfoReader
+This indicated that the value for mapreduce.job.split.metainfo.maxsize is too small for your job (default value of 10000000). There are two options to fix this: 1. Set the value of mapreduce.job.split.metainfo.maxsize to be “-1” (unlimited) specifically for this job just before running it: 
+
+SET mapreduce.job.split.metainfo.maxsize=-1;
+
+This should remove the limit, however, be warned that it will effectively let YARN to create unlimited metadata splits, if there is not enough resources on your cluster, it could have the potential to bring down the host. 2. The safer way is to increase the value to maybe double the value of default, which is 10000000: 
+SET mapreduce.job.split.metainfo.maxsize=20000000;
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+ERROR org.apache.hadoop.security.UserGroupInformation: PriviledgedActionException as:mapred cause:org.apache.hadoop.hdfs.server.namenode.SafeModeException: Cannot delete /tmp/hadoop-root/mapred/system. Name node is in safe mode
+
+error that you cluster is in "safe mode"
+sudo -u hdfs hadoop dfsadmin -safemode get   ------  get the status
+Cause
+During start up, NameNode loads the filesystem state from fsimage and edits log file. It then waits for data nodes to report their blocks so that it does not prematurely start replicating the blocks though, enough replicas already exist in the cluster.
+
+During this time, NameNode stays in safe mode. A safe mode for NameNode is essentially a read-only mode for the HDFS cluster, it does not allow any modifications to file system or blocks. Normally, NameNode disables safe mode automatically at the beginning.
+
+If required, HDFS can be placed in safe mode explicitly using bin/hadoop dfsadmin -safemode command. The NameNode front page shows whether safe mode is on or off.
+Resolution
+A workaround to this issue is to manually move the NameNode out of safe mode. Before doing this, confirm you know and understand why the NameNode is stuck in safe mode by reviewing the status of all DataNodes and the NameNode logs.  In some cases manually disabling safemode can lead to dataloss.
+
+Please note that you must run the command using the HDFS OS user which is the default super user for HDFS. Otherwise, you will encounter the following error: "Access denied for user Hadoop. Superuser privilege is required".
+ 
+1. Run the command below using the HDFS OS user to disable safe mode: 
+sudo -u hdfs hadoop dfsadmin -safemode leave
+2. After attempting to disable safe mode, try to write to the HDFS using the below command: 
+[root@centos-1 ~]# hadoop fs -copyFromLocal .bash_history /tmp/
+[root@centos-1 ~]# hadoop fs -ls /tmp
+Found 6 items
+-rw-r--r-- 3 root supergroup 14904 2012-12-05 17:06 /tmp/.bash_history
+drwxrwxrwx&nbsp;&nbsp; - root supergroup 0 2012-11-28 23:56 /tmp/hadoop-mapred
+drwxr-xr-x&nbsp;&nbsp; - hdfs supergroup 0 2012-11-28 23:56 /tmp/hadoop-root
+drwxr-xr-x&nbsp;&nbsp; - root supergroup 0 2012-11-28 23:27 /tmp/test_input
+drwxrwxrwx&nbsp;&nbsp; - root supergroup&nbsp 0 2012-11-28 23:56 /tmp/test_output
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+Error :- NoRouteToHostException
+
+analysis:    This problem no route to host commonplace, either generally between namenode and datanode hostname itself on mutual ping ping nowhere, this probability is small, because all know that to ensure that the master and slaves nodes are able to communicate properly, it will be checked. It is most likely that a firewall is not closed, or because not view the status of the firewall, the firewall turned off so mistaken.
+
+solution:
+(1) host name from the namenode host ping other slaves nodes (note the host name of the slaves nodes), If the ping fails, possibly because namenode node /etc/hosts not mapping between host name and IP address configuration, completion mappings between host names and IP addresses.
+
+
+(2) from the host name datanode host ping master node (host name of note is the node), If the ping fails, possibly because datenode node /etc/hosts is not configured mappings between host names and IP addresses, to complete a hostname mapping between IP addresses.
+
+
+(3) Check each machine node firewall is turned off (or set the firewall on, but for us the designated port open, best to turn off the firewall):
+
+The following status for different versions of Linux firewall system checks, and turn off the firewall
+
+Ubuntu (ubuntu-12.04-desktop-amd64)
+
+Check the status of firewall: ufw status
+
+Turn off the firewall: ufw disable
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+CentOS6.0
+
+Check firewall status: service iptables status
+
+Turn off the firewall: chkconfig iptables off # boot does not start the firewall service
+
+centos7.0 (default is to use the firewall as a firewall, if it does not change the iptables firewall, use the following command to view and turn off the firewall)
+
+Check firewall status: firewall-cmd --state
+
+Turn off the firewall: systemctl stop firewalld.service
+
+
+
+----------------------------------------------------------------------------------------------------
+ERROR    "remote host identification has changed" when you try to ssh to localhost.
+
+Note :- This can happen if you have created a new server with an IP address you had previously used on a different server.
+        which identifies when the fingerprint of a server has changed:~/.ssh/known_hosts
+This is alarming because it could actually mean that you're connecting to a different server without knowing it. If this new server is malicious then it would be able to view all data sent to and from your connection, which could be used by whoever set up the server. This is called a man-in-the-middle attack. This scenario is exactly what the "WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!" message is trying to warn you about.
+The problem is that you've previously accepted an SSH connection to a remote computer and that remote computer's digital fingerprint or SHA256 hash key has changed since you last connected. Thus when you try to SSH again or use github to pull code, which also uses SSH, you get an error. Why? Because you're using the same remote computer address as before but the remote computer is responding with a different fingerprint. Therefore, it's possible that someone is spoofing the computer you previously connected to. This is a security issue. 
+If you're 100% sure that the remote computer isn't compromised, hacked, being spoofed, etc then all you need to do is delete the entry in your known_hosts file for the remote computer. That will solve the issue as there will no longer be a mismatch with SHA256 fingerprint IDs when connecting.
+You must take bakup before doing such actions
+cp /Users/yourmacusername/.ssh/known_hosts /Users/yourmacusername/.ssh/known_hosts.bak
+if something wrong happen you can resolve.
+ssh-keygen -R [IP_ADDRESS]
+Not a File Exception      Note it down 
+Possible Problem:You may have created a directory inside the input directory in the HDFS. For example, this might happen if you run bin/hadoop dfs -put conf input twice in a row (this would create a subdirectory in input... why?).
+Possible Solution:The easiest way to get the example run is to just start over and make the input anew. 
+$bin/hadoop dfs -rmr input   $bin/hadoop dfs -put conf input
+Below this Example to Understand Not a file Exception
+
+Not a File Exception when running pyspark in Hadoop
+I scoop two datasets from 2 diff sources into Hive. I created a union of the two tables in hive using
+create table db.table as select table 1 union select table 2
+I used this table in pyspark by HiveContext to perform some analytical functions like string indexing on of the columns.
+
+hc=HiveContext(sc)
+data = hc.sql("select * from db.table")
+from pyspark.sql import SQLContext, Row, HiveContext
+from pyspark.ml.feature import StringIndexer
+indexer = StringIndexer(inputCol="col_cat", outputCol="cat_indexed")
+indexed=indexer.fit(data).transform(data)
+
+However I get the following error
+py4j.protocol.Py4JJavaError: An error occurred while calling o63.fit.
+: java.io.IOException: Not a file:
+Solution Finding    So I went into HDFS
+
+          hadoop fs -ls /hive/db/table
+
+          I found the table, I dont know whats the issue here.
+
+I feel its because I did not create an external table. but it worked last time without external.
+Tried Solution
+OK so I found a fix, I moved the files from the directories
+i.e from      /hive/db/table/file   to   /hive/db/file      by doing
+Hadoop fs -mv /hive/db/table/file /hive/db/file
+
+now it works, 
+Conclustion       :-The problem was that union in Hive created a partition between the tables and hence created additional directories to save the files. so when Spark tried to access them it pointed to the directories. So I changed the file location to where spark was pointing.
+org.apache.hadoop.mapred.InvalidInputException:  Input path doesnt exist :
+Possible Problem:-  1st issue can be :- You haven't created an input directory containing one or more text files. 
+Scanario :-
+2nd Issue Provided path may be absolute not comlete like this  "hdfs://localhost:9000/README.md"
+So here we put this complete path into input variable and Worked
+val input = sc.textFile("/home/sdayneko/spark-2.4.3-bin-hadoop2.7/README.md")
+After that, it worked :)
+org.apache.hadoop.mapred.FileAlreadyExistsException:  Output directory /user/ross/output already exists
+Possible Problem:-You might have already run the example once, creating an output directory. Hadoop doesn't like to overwrite files. 
+Possible Solution: Remove the output directory before rerunning the example: 
+bin/hadoop dfs -rmr output
+Alternatively you can change the output directory of the grep example, something like this: 
+bin/hadoop jar hadoop-*-examples.jar \
+grep input output2 'dfs[a-z.]+'
+Scanario :-for understanding
+When running this small piece of Scala code I get a "org.apache.hadoop.mapred.FileAlreadyExistsException: Output directory hdfs://xxx.eu-west-1.compute.internal:8020/user/cloudbreak/data/testdfsio-write". 
+Below the piece of code where the `saveAsTextFile` is executed. The directory does not exist before running this script. Why is this FileAlreadyExistsException raised?
+// Create a Range and parallelize it, on nFiles partitions
+            // The idea is to have a small RDD partitioned on a given number of workers
+            // then each worker will generate data to write
+            val a = sc.parallelize(1 until config.nFiles + 1, config.nFiles)
+
+
+            val b = a.map(i => {
+              // generate an array of Byte (8 bit), with dimension fSize
+              // fill it up with "0" chars, and make it a string for it to be saved as text
+              // TODO: this approach can still cause memory problems in the executor if the array is too big.
+              val x = Array.ofDim[Byte](fSizeBV.value).map(x => "0").mkString("")
+              x
+            })
+
+   // Force computation on the RDD
+            sc.runJob(b, (iter: Iterator[_]) => {})
+
+
+            // Write output file
+            val (junk, timeW) = profile {
+              b.saveAsTextFile(config.file)            }
+Solution :-  solved by not having to many partitions for parallelize ( it creates multiple directories).
+You can run Hadoop jobs written in Java (like the grep example), but your HadoopStreaming jobs (such as the Python example that fetches web page titles) won't work
+Possible Problem:-You might have given only a relative path to the mapper and reducer programs. The tutorial originally just specified relative paths, but absolute paths are required if you are running in a real cluster. 
+Possible Solution: Use absolute paths like this from the tutorial: 
+bin/hadoop jar contrib/hadoop-0.15.2-streaming.jar \
+  -mapper  $HOME/proj/hadoop/multifetch.py         \
+  -reducer $HOME/proj/hadoop/reducer.py            \
+  -input   urls/*                                  \
+  -output  titles
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+Guidance Regarding Trouble Shooting 
+
+How do I log anything in Hadoop? Where does the output go?
+
+
+Solution:-The easiest solution is to use System.out.println for debugging.
+
+The output will get logged to a file called stdout under /mnt/hadoop/logs/userlogs/task_id
+where task_id is the identifier for that particular task. The web interface for your job tracker can help you figure out which machine to inspect the logs at, and the relevant task identifier.
+Cannot run program "...........": java.io.IOException:error=12, Cannot allocate memory
+WARN org.apache.hadoop.mapred.TaskTracker:Error running child
+java.io.IOException: Cannot run program "df": java.io.IOException:
+
+Solution:- There are several reasons why you might be getting this error. Here are some of the things you can try:
+
+1. Establish Correctness of code by creating small set of it.so can get around memory bottleneck.
+2. See this error regarding Mapred or map phase try reducing the size of your keys and values. For instance, instead of using the full path to a file, you may want to just use the file name (the final segment of the absolute path).
+3. If you see this error during the reduce phase, try increasing the number of reduce tasks to 2 or 4 (use jobconf.setNumReduceTasks)
+Help! My MapReduce failed! What do I do? (Approch)
+if Mapreduce or yarn job fail approch what will be the approch?
+- 1st Yarn Applicaton Id find from client Log,Hive log, spark log, custom log.
+- 2nd Search above “Application Id” on RM’S web UI OR RM’S LOG to find out on which Node manager the AM container run    
+- 3rd From Above find out on which node AM container fails
+- Find out the error and Resolve it
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+jaava.io.IOException: wrong value class: xyz at org.apache.hadoop.io.SequenceFile$Writer.append(SequenceFile.java:171) at org.apache.hadoop.mapred.MapTask$2.collect(MapTask.java:147)   at org.apache.hadoop.mapred.lib.IdentityReducer.reduce(IdentityReducer.java:39)
+keep getting the error
+Root Cause:
+
+Combiner are mini-reducers which uses the same implementation as that of reducers. Reducer's takes input key as Text and value as LongWritable and output key as Text and value as Text 
+public static class MyReducer extends Reducer<Text, LongWritable, Text, Text>
+In this case combiner are able to get the right input key/value and emitting output key/value as Text which are input for the Reducer and here the problem arises because in this case Reducer can only accept the key/value as Text and LongWritable. 
+Solution: 1
+Ensure that combiners output are of same type as input type for reducers 
+This error isn't in your code, so how could you have caused it? This particular error is from setting an incompatible class for JobConf.setOutputValueClass(class_name). Similar errors an arrise with any of the other set*Class methods. Check your code to make sure that your Map and Reduce classes are returning the proper objects as specified by your set*Class functions. Remember, the classes for {key, value} must implement {WritableComparable, Writable}, respectively.
+java.lang.RuntimeException:java.lang.NoSuchMethodException: com.google.hadoop.examples.Simple$MyMapper.()
+at org.apache.hadoop.util.ReflectionUtils.newInstance(ReflectionUtils.java:45)
+at org.apache.hadoop.mapred.MapRunner.configure(MapRunner.java:32)
+In your program, Hadoop is using reflection and it can not guess any parameters to feed. You should provide an empty default constructor in your key class. 
+So just add the default constructor:   public Classname(){}
+Also,
+Whenever you get errors like this for classes which are writable, mappers, reducers, etc.
+If the class is an inner class, and not defined as static, then first make them static.
+In your code Mapper and reducer, classes need to be defined statically.
+public static class MaxTemperatureMapper extends Mapper<....
+public static class MaxTemperatureReducer extends Reducer<....
+java.io.IOException: Failed to create file file_name on client namenode_host because this cluster has no datanodes
+
+Solution1 :- run bin/start-all.sh.make sure you have all the necessary daemons running.
+Solution2 :-If you're still having problems because the DataNodes don't last long before terminating themselves, This is because your DataNodes have crashed. The most likely cause is that the DataNodes have gotten confused as to the version of the Distributed File System is running. It is unknown why this happens, but the only fix at this time is to delete the file system and recreate it (reformatting with bin/hadoop namenode -format doesn't seem to fix it). You'll have to delete /mnt/hadoop/dfs, then run bin/hadoop namenode -format again before restarting everything and trying again.
